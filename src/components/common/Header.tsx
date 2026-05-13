@@ -2,13 +2,13 @@
 
 import { Menu, Moon, Sun, Bell } from "lucide-react";
 import { useTheme } from "next-themes";
+import Image from "next/image";
 import Link from "next/link";
 
-import { useAuth }        from "@/context/AuthContext";
-import { useAppDispatch } from "@/store/hooks";
-import { toggleSidebar }  from "@/store/slices/uiSlice";
-import { cn }             from "@/lib/utils";
-import { generateInitials } from "@/lib/utils";
+import { useAuth }           from "@/context/AuthContext";
+import { cn, generateInitials } from "@/lib/utils";
+import { useAppDispatch }    from "@/store/hooks";
+import { toggleSidebar }     from "@/store/slices/uiSlice";
 
 export default function Header({ className }: { className?: string }) {
   const { user, logout } = useAuth();
@@ -61,8 +61,13 @@ export default function Header({ className }: { className?: string }) {
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
               {user.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.image} alt={user.name} className="h-8 w-8 rounded-full object-cover" />
+                <Image
+                  src={user.image}
+                  alt={user.name}
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 rounded-full object-cover"
+                />
               ) : (
                 generateInitials(user.name)
               )}
