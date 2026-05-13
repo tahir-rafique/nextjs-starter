@@ -1,0 +1,71 @@
+version: 2
+
+updates:
+  # ── npm dependencies ─────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: "Asia/Karachi"
+    open-pull-requests-limit: 10
+    # Group patch and minor updates into a single PR
+    groups:
+      react-ecosystem:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+      testing:
+        patterns:
+          - "jest"
+          - "jest-*"
+          - "@testing-library/*"
+          - "msw"
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "tailwind-*"
+          - "autoprefixer"
+          - "postcss"
+      typescript:
+        patterns:
+          - "typescript"
+          - "@typescript-eslint/*"
+      eslint:
+        patterns:
+          - "eslint"
+          - "eslint-*"
+    # Auto-label Dependabot PRs
+    labels:
+      - "dependencies"
+      - "automated"
+    # Commit message prefix
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+      include: "scope"
+    # Ignore major version bumps for stable packages (review manually)
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "next-auth"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mongoose"
+        update-types: ["version-update:semver-major"]
+
+  # ── GitHub Actions ───────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(actions)"

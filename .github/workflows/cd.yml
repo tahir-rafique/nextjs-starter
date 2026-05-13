@@ -1,0 +1,196 @@
+name: CD — Deploy to Vercel
+
+on:
+  # Preview deploy on every PR targeting main
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+  # Production deploy on merge to main
+  push:
+    branches: [main]
+
+# Cancel in-flight deploys for the same ref
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20.x"
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Preview deploy — triggered on every PR push
+  # ─────────────────────────────────────────────────────────────
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.preview-url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment (preview)
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build project artifacts
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel (preview)
+        id: deploy
+        run: |
+          PREVIEW_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "preview-url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "🚀 Preview URL: $PREVIEW_URL"
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const previewUrl = "${{ steps.deploy.outputs.preview-url }}";
+            const sha = context.payload.pull_request.head.sha.slice(0, 7);
+            const body = [
+              "## 🚀 Preview Deployment",
+              "",
+              `| Field       | Value                                                      |`,
+              `|-------------|------------------------------------------------------------|`,
+              `| **URL**     | [${previewUrl}](${previewUrl})                             |`,
+              `| **Commit**  | \`${sha}\`                                                 |`,
+              `| **Branch**  | \`${context.payload.pull_request.head.ref}\`               |`,
+              `| **Status**  | ✅ Deployed                                                |`,
+              "",
+              "> This preview will be available as long as the PR is open.",
+            ].join("\n");
+
+            // Find and update existing bot comment instead of spamming
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.data.find(
+              (c) => c.user.type === "Bot" && c.body.includes("Preview Deployment")
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
+
+  # ─────────────────────────────────────────────────────────────
+  # Production deploy — triggered only on push to main
+  # ─────────────────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.production-url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment (production)
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build project artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel (production)
+        id: deploy
+        run: |
+          PRODUCTION_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "production-url=$PRODUCTION_URL" >> $GITHUB_OUTPUT
+          echo "✅ Production URL: $PRODUCTION_URL"
+
+      - name: Create GitHub deployment status
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const productionUrl = "${{ steps.deploy.outputs.production-url }}";
+            const sha = context.sha;
+            // Create a deployment record
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha,
+              environment: "production",
+              auto_merge: false,
+              required_contexts: [],
+              description: "Vercel production deployment",
+            });
+            if (deployment.status === 201) {
+              await github.rest.repos.createDeploymentStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deployment_id: deployment.data.id,
+                state: "success",
+                environment_url: productionUrl,
+                description: "Deployment succeeded",
+              });
+            }
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Production deploy failed — ${new Date().toISOString().split('T')[0]}`,
+              body: [
+                "A production deployment failed.",
+                "",
+                `- **Commit:** \`${context.sha.slice(0, 7)}\``,
+                `- **Workflow run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                "",
+                "Please investigate immediately.",
+              ].join("\n"),
+              labels: ["bug", "deployment"],
+            });
