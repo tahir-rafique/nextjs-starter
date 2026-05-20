@@ -17,4 +17,4 @@ export interface User {
 export type CreateUserInput = Omit<User, "_id" | "createdAt" | "updatedAt" | "lastLoginAt">;
 export type UpdateUserInput = Partial<Pick<User, "name" | "image" | "bio">>;
 
-export interface UserListItem extends Pick<User, "_id" | "name" | "email" | "image" | "role" | "isVerified" | "createdAt"> {}
+export type UserListItem = Pick<User, "_id" | "name" | "email" | "image" | "role" | "isVerified" | "createdAt">;

@@ -1,15 +1,12 @@
-import { NextResponse } from "next/server";
-
 import {
-  apiBadRequest,
   apiConflict,
   apiServerError,
   apiSuccess,
   apiValidationError,
 } from "@/lib/api-response";
-import connectDB          from "@/lib/db";
+import connectDB from "@/lib/db";
 import { registerSchema } from "@/lib/validations";
-import UserModel          from "@/models/User";
+import UserModel from "@/models/User";
 
 /**
  * POST /api/auth/register

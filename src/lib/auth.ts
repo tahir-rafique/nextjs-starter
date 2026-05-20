@@ -4,6 +4,7 @@
  * Extend with more providers as needed.
  */
 import type { NextAuthOptions, User } from "next-auth";
+import type { UserRole } from "@/types/auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GitHubProvider from "next-auth/providers/github";
 import GoogleProvider from "next-auth/providers/google";
@@ -43,7 +44,7 @@ export const authOptions: NextAuthOptions = {
         const user = await UserModel.findOne({ email: credentials.email }).select(
           "+password"
         );
-        if (!user) throw new Error("No account found with this email.");
+        if (!user || !user.password) throw new Error("No account found with this email.");
 
         const isValid = await bcrypt.compare(credentials.password, user.password);
         if (!isValid) throw new Error("Incorrect password.");
@@ -118,7 +119,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id   = token.id as string;
-        session.user.role = token.role as string;
+        session.user.role = token.role as UserRole;
       }
       return session;
     },
