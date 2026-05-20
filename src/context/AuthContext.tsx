@@ -4,7 +4,7 @@
  * AuthContext — wraps NextAuth session into a convenient React context.
  * Keeps Redux auth slice in sync automatically.
  */
-import React, {
+import {
   createContext,
   useCallback,
   useContext,
@@ -35,38 +35,37 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 /* ── Provider ───────────────────────────────────────────────── */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
-  const dispatch = useAppDispatch();
+  const dispatch  = useAppDispatch();
   const isLoading = status === "loading";
 
-  /* Sync session → Redux */
+  /* Memoised user object — only rebuilds when individual session fields change */
+  const user = useMemo<AuthUser | null>(() => {
+    if (!session?.user) return null;
+    return {
+      id:    session.user.id,
+      name:  session.user.name  ?? "",
+      email: session.user.email ?? "",
+      image: session.user.image ?? null,
+      role:  session.user.role,
+    };
+  }, [
+    session?.user?.id,
+    session?.user?.name,
+    session?.user?.email,
+    session?.user?.image,
+    session?.user?.role,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Sync session → Redux store */
   useEffect(() => {
-    if (session?.user) {
-      dispatch(
-        setUser({
-          id:    session.user.id,
-          name:  session.user.name ?? "",
-          email: session.user.email ?? "",
-          image: session.user.image ?? null,
-          role:  session.user.role,
-        })
-      );
+    if (user) {
+      dispatch(setUser(user));
     } else if (status === "unauthenticated") {
       dispatch(clearAuth());
     }
-  }, [session, status, dispatch]);
+  }, [user, status, dispatch]);
 
-  /* Derived auth user */
-  const user: AuthUser | null = session?.user
-    ? {
-        id:    session.user.id,
-        name:  session.user.name ?? "",
-        email: session.user.email ?? "",
-        image: session.user.image ?? null,
-        role:  session.user.role,
-      }
-    : null;
-
-  /* Actions */
+  /* ── Actions ────────────────────────────────────────────────── */
   const login = useCallback(async (email: string, password: string) => {
     const result = await signIn("credentials", { redirect: false, email, password });
     return { error: result?.error ?? undefined };
@@ -89,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user]
   );
 
+  /* ── Context value ──────────────────────────────────────────── */
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
